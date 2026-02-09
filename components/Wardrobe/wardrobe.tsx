@@ -14,154 +14,151 @@ interface WardrobeState {
   accessories: WardrobeRowType[];
 }
 
+type TotalsState = {
+  wooden: Record<number, number>;
+  accessories: Record<number, number>;
+};
+
 const Wardrobe: React.FC = () => {
-  const { setWardrobeAccessories, setWardrobeWood } = useTotalSumStore(
-    (state) => state
-  );
+  const { setWardrobeAccessories, setWardrobeWood } = useTotalSumStore();
+
   const [wardrobeRows, setWardrobeRows] = useState<WardrobeState>({
     wooden: [],
     accessories: [],
   });
-  const [totals, setTotals] = useState<{ [key: string]: number[] }>({
-    wooden: [],
-    accessories: [],
+
+  const [totals, setTotals] = useState<TotalsState>({
+    wooden: {},
+    accessories: {},
   });
 
   const addWardrobeRow = (type: keyof WardrobeState) => {
-    const newRowId = wardrobeRows[type].length + 1;
-    setWardrobeRows((prevRows) => ({
-      ...prevRows,
-      [type]: [...prevRows[type], { id: newRowId }],
+    const newId =
+      wardrobeRows[type].length > 0
+        ? Math.max(...wardrobeRows[type].map((r) => r.id)) + 1
+        : 1;
+
+    setWardrobeRows((prev) => ({
+      ...prev,
+      [type]: [...prev[type], { id: newId }],
     }));
-    setTotals((prevTotals) => ({
-      ...prevTotals,
-      [type]: [...prevTotals[type], 0], // Add a new entry in the totals array
+
+    setTotals((prev) => ({
+      ...prev,
+      [type]: { ...prev[type], [newId]: 0 },
     }));
   };
 
-  const deleteWardrobeRow = (
-    id: number,
-    type: keyof WardrobeState,
-    deleteTotal: number
-  ) => {
-    setWardrobeRows((prevRows) => ({
-      ...prevRows,
-      [type]: prevRows[type].filter((row) => row.id !== id),
+  const deleteWardrobeRow = (id: number, type: keyof WardrobeState) => {
+    setWardrobeRows((prev) => ({
+      ...prev,
+      [type]: prev[type].filter((row) => row.id !== id),
     }));
-    setTotals((prevTotals) => ({
-      ...prevTotals,
-      [type]: prevTotals[type].filter((_, index) => index !== id - 1), // Remove the total at the corresponding index
-    }));
+
+    setTotals((prev) => {
+      const copy = { ...prev[type] };
+      delete copy[id];
+      return { ...prev, [type]: copy };
+    });
   };
 
   const updateTotal = (
     type: keyof WardrobeState,
-    grandTotal: number,
-    id: number
+    id: number,
+    total: number,
   ) => {
-    setTotals((prevTotals) => ({
-      ...prevTotals,
-      [type]: prevTotals[type].map((total, index) =>
-        index === id - 1 ? grandTotal : total
-      ),
-    }));
+    setTotals((prev) => {
+      if (prev[type][id] === total) return prev; // 🔒 NO loop
+      return {
+        ...prev,
+        [type]: {
+          ...prev[type],
+          [id]: total,
+        },
+      };
+    });
   };
 
-  // Calculate the sum of totals for a specific category
-  const calculateTotalSum = (type: keyof WardrobeState) => {
-    return wardrobeRows[type].reduce((acc, row) => {
-      const rowTotal = totals[type][row.id - 1] || 0; // Get the total for this row
-      return acc + rowTotal;
-    }, 0);
-  };
+  const sumTotals = (type: keyof WardrobeState) =>
+    Object.values(totals[type]).reduce((a, b) => a + b, 0);
 
   useEffect(() => {
-    // Update the total sum in the Zustand store whenever wardrobeRows or totals change
-    const woodenTotal = calculateTotalSum("wooden");
-    const accessoriesTotal = calculateTotalSum("accessories");
-    setWardrobeWood(woodenTotal);
-    setWardrobeAccessories(accessoriesTotal);
-  }, [wardrobeRows, totals]);
+    setWardrobeWood(sumTotals("wooden"));
+    setWardrobeAccessories(sumTotals("accessories"));
+  }, [totals, setWardrobeWood, setWardrobeAccessories]);
 
   return (
     <div className="w-full h-full px-4 py-16">
       <div className="mx-auto w-full max-w-[80%] rounded-2xl bg-white p-2 space-y-6">
+        {/* WOODEN */}
         <Disclosure>
           {({ open }) => (
             <>
-              <Disclosure.Button className="flex w-full justify-between rounded-lg bg-purple-100 px-4 py-2 text-left text-sm font-medium text-purple-900 hover:bg-purple-200 focus:outline-none focus-visible:ring focus-visible:ring-purple-500/75">
+              <Disclosure.Button className="flex w-full justify-between rounded-lg bg-purple-100 px-4 py-2">
                 <span>Wardrobe Wooden</span>
                 <ChevronUpIcon
-                  className={`${
-                    open ? "rotate-180 transform" : ""
-                  } h-5 w-5 text-purple-500`}
+                  className={`${open ? "rotate-180" : ""} h-5 w-5`}
                 />
               </Disclosure.Button>
-              <Disclosure.Panel className="px-4 pb-2 py-4 text-sm text-gray-500 ">
-                <div className="flex flex-col space-y-4 md:flex-row md:flex-wrap">
-                  {wardrobeRows.wooden.map((row, index) => (
-                    <WardrobeRow
-                      key={row.id}
-                      data={dummyData.wardrobe}
-                      deleteRow={(id, deleteTotal) =>
-                        deleteWardrobeRow(id, "wooden", deleteTotal)
-                      }
-                      updateTotal={(grandTotal) =>
-                        updateTotal("wooden", grandTotal, row.id)
-                      }
-                      id={row.id}
-                    />
-                  ))}
-                  <div className="w-full flex justify-center">
-                    <PlusCircleIcon
-                      className="h-8 w-8 cursor-pointer my-4"
-                      onClick={() => addWardrobeRow("wooden")}
-                    />
-                  </div>
-                  <div className="border-t-2 border-black w-full">
-                    Total: {calculateTotalSum("wooden")}
-                  </div>
+
+              <Disclosure.Panel className="px-4 py-4">
+                {wardrobeRows.wooden.map((row) => (
+                  <WardrobeRow
+                    key={row.id}
+                    id={row.id}
+                    data={dummyData.wardrobe}
+                    updateTotal={(total) =>
+                      updateTotal("wooden", row.id, total)
+                    }
+                    deleteRow={() => deleteWardrobeRow(row.id, "wooden")}
+                  />
+                ))}
+
+                <PlusCircleIcon
+                  className="h-8 w-8 cursor-pointer my-4 mx-auto"
+                  onClick={() => addWardrobeRow("wooden")}
+                />
+
+                <div className="border-t-2 border-black">
+                  Total: {sumTotals("wooden")}
                 </div>
               </Disclosure.Panel>
             </>
           )}
         </Disclosure>
+
+        {/* ACCESSORIES */}
         <Disclosure>
           {({ open }) => (
             <>
-              <Disclosure.Button className="flex w-full justify-between rounded-lg bg-purple-100 px-4 py-2 text-left text-sm font-medium text-purple-900 hover:bg-purple-200 focus:outline-none focus-visible:ring focus-visible:ring-purple-500/75">
+              <Disclosure.Button className="flex w-full justify-between rounded-lg bg-purple-100 px-4 py-2">
                 <span>Wardrobe Accessories</span>
                 <ChevronUpIcon
-                  className={`${
-                    open ? "rotate-180 transform" : ""
-                  } h-5 w-5 text-purple-500`}
+                  className={`${open ? "rotate-180" : ""} h-5 w-5`}
                 />
               </Disclosure.Button>
-              <Disclosure.Panel className="px-4 pb-2 py-4 text-sm text-gray-500 sm:overflow-x-scroll hideScroll">
-                <div className="flex flex-col space-y-4 md:flex-row md:flex-wrap ">
-                  {wardrobeRows.accessories.map((row, index) => (
-                    <RowAccessories
-                      key={row.id}
-                      data={dummyData.wardrobe_accessories}
-                      deleteRow={(id, deleteTotal) =>
-                        deleteWardrobeRow(id, "accessories", deleteTotal)
-                      }
-                      updateTotal={(grandTotal) =>
-                        updateTotal("accessories", grandTotal, row.id)
-                      }
-                      id={row.id}
-                      accessoryObject={dummyData.accessoriesObjectWardrobe}
-                    />
-                  ))}
-                  <div className="w-full flex justify-center">
-                    <PlusCircleIcon
-                      className="h-8 w-8 cursor-pointer my-4"
-                      onClick={() => addWardrobeRow("accessories")}
-                    />
-                  </div>
-                  <div className="border-t-2 border-black w-full">
-                    Total: {calculateTotalSum("accessories")}
-                  </div>
+
+              <Disclosure.Panel className="px-4 py-4">
+                {wardrobeRows.accessories.map((row) => (
+                  <RowAccessories
+                    key={row.id}
+                    id={row.id}
+                    data={dummyData.wardrobe_accessories}
+                    accessoryObject={dummyData.accessoriesObjectWardrobe}
+                    updateTotal={(total) =>
+                      updateTotal("accessories", row.id, total)
+                    }
+                    deleteRow={() => deleteWardrobeRow(row.id, "accessories")}
+                  />
+                ))}
+
+                <PlusCircleIcon
+                  className="h-8 w-8 cursor-pointer my-4 mx-auto"
+                  onClick={() => addWardrobeRow("accessories")}
+                />
+
+                <div className="border-t-2 border-black">
+                  Total: {sumTotals("accessories")}
                 </div>
               </Disclosure.Panel>
             </>
